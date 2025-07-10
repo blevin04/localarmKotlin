@@ -109,9 +109,11 @@ import androidx.core.util.Function
 import androidx.lifecycle.ViewModel
 import androidx.media3.common.util.NotificationUtil
 import androidx.room.AutoMigration
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Delete
+import androidx.room.DeleteTable
 import androidx.room.Entity
 import androidx.room.Insert
 import androidx.room.PrimaryKey
@@ -151,6 +153,7 @@ import kotlin.random.Random
 
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.room.migration.AutoMigrationSpec
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingClient
 import com.google.android.gms.location.GeofencingRequest
@@ -273,6 +276,7 @@ data class GeoAlarm  (
     var points: MutableList<MutableList<Double>> = mutableListOf<MutableList<Double>>(),
     var isActive: Boolean = false,
     var isDebugging: Boolean = false,
+//    @ColumnInfo(defaultValue = "0.0")
     var radius: Double = 0.0,
 )
 @Dao
@@ -292,8 +296,16 @@ interface GeoAlarmDao {
     @Update
     fun updategeoAlarm(vararg geoAlarm: GeoAlarm)
 }
+@DeleteTable.Entries(
 
-@Database(entities = [GeoAlarm::class], version = 2, autoMigrations = [AutoMigration(from = 1, to = 2)])
+    DeleteTable(tableName = "GeoAlarm")
+)
+class GeoAlarmMigrationSpec : AutoMigrationSpec
+@Database(entities = [GeoAlarm::class], version = 2
+//    , autoMigrations = [AutoMigration(from = 1, to = 2, )]
+//    spec = GeoAlarmMigrationSpec::class)]
+    ,exportSchema= true
+)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun geoAlarmDao(): GeoAlarmDao
@@ -303,7 +315,7 @@ class backEndStuff(application: Application):ViewModel(){
     val db = Room.databaseBuilder(
         application,
         AppDatabase::class.java, "database-name"
-    ).build()
+    ).fallbackToDestructiveMigration(true).build()
     suspend fun getStuff():List<GeoAlarm>{
         val geoalarmdao = db.geoAlarmDao()
         val stuff = geoalarmdao.getAll()
@@ -409,6 +421,7 @@ class MainActivity : ComponentActivity() {
                 darkScrim = 1
             )
         )
+//        applicationContext.deleteDatabase("database-name")
         setContent {
             GeoMap0Theme {
                 var sliderPosition by remember { mutableFloatStateOf(100f) }
