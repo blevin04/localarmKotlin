@@ -19,7 +19,15 @@ import com.google.android.gms.location.GeofencingEvent
 
 class GeofenceBroadcastReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-//        Log.d("TAG", "onReceive: damn")
+        Log.d("TAG", "onReceive: damn")
+        if (context == null ){
+            Log.e("Geofence","Context  is null")
+            return
+        }
+        if ( intent == null){
+            Log.e("Geofence","intent is null")
+            return
+        }
         val event = GeofencingEvent.fromIntent(intent)
         if (event != null) {
             if (event.hasError()) {
@@ -28,28 +36,36 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
             }
         }
 
-        val transition = event?.geofenceTransition
-        val ids = event?.triggeringGeofences?.map { it.requestId }
-        val dd = ids?.let { backEndStuff(application = Application()).getstufById(it.first()) } as GeoAlarm
-        val note = dd.note
-        when (transition) {
-            Geofence.GEOFENCE_TRANSITION_ENTER -> {
+        Thread{
+            val transition = event?.geofenceTransition
+            val ids = event?.triggeringGeofences?.map { it.requestId }
+            Log.e("Id","${event?.triggeringGeofences?.first()}:${intent.extras}:${event?.triggeringGeofences?.size}:${event?.triggeringGeofences?.last()?.radius}")
+            val dd = ids?.let { backEndStuff(application = context).getstufById(it.first()) }
+            if (dd == null){
+                Log.e("Database","The id is not contained in the database")
+                return@Thread
+            }
+            val note = dd.note
+            when (transition) {
+                Geofence.GEOFENCE_TRANSITION_ENTER -> {
 //                Log.d("Geofence", "Entered: $ids")
-                sendNotification(
-                    context = context,
-                    title = "Entered Location",
-                    body = note
-                )
-            }
-            Geofence.GEOFENCE_TRANSITION_EXIT -> {
+                    sendNotification(
+                        context = context,
+                        title = "Entered Location",
+                        body = note.toString()
+                    )
+                }
+                Geofence.GEOFENCE_TRANSITION_EXIT -> {
 //                Log.d("Geofence", "Exited: $ids")
-                sendNotification(
-                    context = context,
-                    title = "Exited Location",
-                    body = note,
-                )
+                    sendNotification(
+                        context = context,
+                        title = "Exited Location",
+                        body = note.toString(),
+                    )
+                }
             }
-        }
+        }.start()
+
 
     }
 }

@@ -31,6 +31,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
@@ -106,6 +108,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat.getSystemService
 
 import androidx.core.util.Function
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.media3.common.util.NotificationUtil
 import androidx.room.AutoMigration
@@ -198,11 +201,11 @@ fun getGeofencePendingIntent(context: Context): PendingIntent {
 fun  addGeofence(
     context: Context,
     geofencingClient: GeofencingClient,
-    lat: Double,
-    lng: Double,
-    radius: Float
+    geoAlarm: GeoAlarm
 ) {
-    val geofence = createGeofence("mygeofenceid", lat, lng, radius)
+//    -0.3947315, 36.9636633
+    Log.d("info", "${geoAlarm.points.first().first()}:${geoAlarm.points.first().last()}")
+    val geofence = createGeofence(geoAlarm.id, geoAlarm.points.first().first(), geoAlarm.points.first().last(), geoAlarm.radius.toFloat())
     val request = createGeofencingRequest(geofence)
     val pendingIntent = getGeofencePendingIntent(context)
 
@@ -219,21 +222,21 @@ fun  addGeofence(
         .addOnFailureListener { Log.e("Geofence", "Failed: alot") }
 }
 
-fun GeofenceScreen(
-    lat: Double,
-    lng: Double,
-    context: Context,
-    geofencingClient: GeofencingClient) {
-//    val geofencingClient = remember { LocationServices.getGeofencingClient(context) }
-            addGeofence(
-                context = context,
-                geofencingClient = geofencingClient,
-                lat = lat, // your coordinates
-                lng = lng,
-                radius = 100f
-            )
-
-}
+//fun GeofenceScreen(
+//    lat: Double,
+//    lng: Double,
+//    context: Context,
+//    geofencingClient: GeofencingClient) {
+////    val geofencingClient = remember { LocationServices.getGeofencingClient(context) }
+//            addGeofence(
+//                context = context,
+//                geofencingClient = geofencingClient,
+//                lat = lat, // your coordinates
+//                lng = lng,
+//                radius = 100f
+//            )
+//
+//}
 /////////////////////////////////////////////////////
 
 /////Notification channel regestration/////////
@@ -288,14 +291,15 @@ interface GeoAlarmDao {
     fun delete(geoAlarm: GeoAlarm)
 
     @Query("SELECT * FROM geoAlarm")
-    suspend fun getAll(): List<GeoAlarm>
+    fun getAll(): List<GeoAlarm>
 
     @Query("SELECT * FROM geoAlarm WHERE id == :id")
-    fun findid(id: String):GeoAlarm
+    fun findid(id: String):GeoAlarm?
 
     @Update
     fun updategeoAlarm(vararg geoAlarm: GeoAlarm)
 }
+
 @DeleteTable.Entries(
 
     DeleteTable(tableName = "GeoAlarm")
@@ -311,12 +315,12 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun geoAlarmDao(): GeoAlarmDao
 }
 
-class backEndStuff(application: Application):ViewModel(){
+class backEndStuff(application: Context):ViewModel(){
     val db = Room.databaseBuilder(
         application,
         AppDatabase::class.java, "database-name"
     ).fallbackToDestructiveMigration(true).build()
-    suspend fun getStuff():List<GeoAlarm>{
+     fun getStuff():List<GeoAlarm>{
         val geoalarmdao = db.geoAlarmDao()
         val stuff = geoalarmdao.getAll()
         println(stuff)
@@ -338,9 +342,10 @@ class backEndStuff(application: Application):ViewModel(){
         println(geoAlarm.id0)
         return true
     }
-    fun getstufById(string: String):GeoAlarm{
+    fun getstufById(string: String):GeoAlarm?{
         val da03 = db.geoAlarmDao()
         val data = da03.findid(string)
+//        Log.i("room","${data}")
         return  data
     }
 }
@@ -363,6 +368,7 @@ class MapViewModel ():ViewModel(){
             _circles.first().isDebugging = true
             _circles.first().iscircle = true
             _circles.first().radius = 100.0;
+
             incompleteGeoAlarm = _circles.first()
 
         }else{
@@ -379,6 +385,7 @@ class MapViewModel ():ViewModel(){
 //            println(_circles.first())
             if (_circles.first().isDebugging && _circles.first().iscircle){
                 println("Hello mf")
+//                _circles.first().id = newCenter.toString()
                 _circles[0] = _circles.first().copy(points = mutableListOf(mutableListOf(newCenter.latitude,newCenter.longitude)))
                 incompleteGeoAlarm = _circles.first()
             }
@@ -406,7 +413,7 @@ class MapViewModel ():ViewModel(){
         incompleteGeoAlarm = GeoAlarm()
     }
 }
-var activeGeoalarms = listOf<GeoAlarm>()
+
 
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
@@ -427,23 +434,29 @@ class MainActivity : ComponentActivity() {
                 var sliderPosition by remember { mutableFloatStateOf(100f) }
                 var showBottomSheet by remember { mutableStateOf(false) }
                 var isdibugging by remember { mutableStateOf(false) }
+                var createdAlarm = mutableListOf<GeoAlarm>()
+                CoroutineScope(Dispatchers.IO).launch {
+                    createdAlarm = backEndStuff(application = application).getStuff().toMutableList()
+                }
+//                var activeGeoalarms by remember { mutableListOf(List<GeoAlarm>) }
                 var addnote by remember { mutableStateOf(false) }
                 fun showbottomDrawer(){
                     showBottomSheet = true
                 }
+
                 val scope = rememberCoroutineScope()
                 val snackbarHostState = remember { SnackbarHostState() }
                 CoroutineScope(Dispatchers.IO).launch {
                     createNotificationChannel(context = applicationContext)
                 }
                 Scaffold(
+                    containerColor = Color.White,
                     floatingActionButtonPosition = FabPosition.Start,
                     snackbarHost = {
                         SnackbarHost(hostState = snackbarHostState)
                     },
 
                     floatingActionButton =
-
                         {
                             if (
                                 !isdibugging
@@ -472,7 +485,7 @@ class MainActivity : ComponentActivity() {
 
                                     ){
                                         Slider(
-                                            valueRange = 10f..200f,
+                                            valueRange = 50f..200f,
                                             enabled = true,
                                             value = sliderPosition,
                                             onValueChange = { sliderPosition = it},
@@ -558,21 +571,21 @@ class MainActivity : ComponentActivity() {
                     topBar = {
                         TopAppBar(
                             actions = {
-                                IconButton(
-                                    onClick = {
-                                        kotlin.run {
-
-                                                sendNotification(title = "Test01", body = "NIce", context = applicationContext)
-
-                                        }
-                                    }
-                                ) {
-                                    Icon(
-                                        painter = painterResource(com.google.maps.android.compose.R.drawable.googleg_standard_color_18),
-                                        contentDescription = "nice"
-
-                                    )
-                                }
+//                                IconButton(
+//                                    onClick = {
+//                                        kotlin.run {
+////                                                    addGeofence(context = applicationContext, geofencingClient = LocationServices.getGeofencingClient(applicationContext), geoAlarm = incompleteGeoAlarm)
+////                                                sendNotification(title = "Test01", body = "NIce", context = applicationContext)
+//
+//                                        }
+//                                    }
+//                                ) {
+//                                    Icon(
+//                                        painter = painterResource(com.google.maps.android.compose.R.drawable.googleg_standard_color_18),
+//                                        contentDescription = "nice"
+//
+//                                    )
+//                                }
                                 Icon(
                                     modifier = Modifier
                                         .padding(all = 15.dp)
@@ -594,7 +607,7 @@ class MainActivity : ComponentActivity() {
                                         },
                                     tint = Color.Black,
                                     contentDescription = "Menu",
-                                    imageVector = Icons.AutoMirrored.Filled.List)
+                                    imageVector = Icons.Rounded.Search)
                             },
                             colors = TopAppBarDefaults.topAppBarColors(
                                 containerColor = Color.White
@@ -624,7 +637,14 @@ class MainActivity : ComponentActivity() {
 //                        Greeting(name = "JAMES", modifier = Modifier.padding(innerPadding))
 //                    }
 
-                    GetPermissions(application = application, coroutineScope =scope, snackbarHostState = snackbarHostState, circleR = sliderPosition)
+                    GetPermissions(
+                        application = application,
+                        coroutineScope =scope,
+                        snackbarHostState = snackbarHostState,
+                        circleR = sliderPosition,
+                        createdAlarm = createdAlarm,
+                        innerPaddingValues = innerPadding
+                    )
                     if (addnote){
                         var text by
                         rememberSaveable(stateSaver = TextFieldValue.Saver) {
@@ -671,20 +691,27 @@ class MainActivity : ComponentActivity() {
                                         TextButton(
                                             modifier = Modifier.padding(start = 80.dp),
                                             onClick = {
+                                                var rd = 10.0
+                                                if (incompleteGeoAlarm.iscircle){
+                                                    rd = sliderPosition.toDouble()
+                                                }
+                                                incompleteGeoAlarm.id = Random.nextInt().toString()
                                                 CoroutineScope(Dispatchers.IO).launch{
+                                                    addGeofence(context = applicationContext, geofencingClient = LocationServices.getGeofencingClient(applicationContext), geoAlarm = incompleteGeoAlarm)
                                                     backEndStuff(application = application).addStuff(
                                                         GeoAlarm(
-                                                            id = Random.nextInt().toString(),
-                                                            iscircle = true,
+                                                            id = incompleteGeoAlarm.id,
+                                                            iscircle = incompleteGeoAlarm.iscircle,
                                                             note = text.text,
                                                             points = incompleteGeoAlarm.points,
                                                             isActive = true,
-                                                            isDebugging = false
-
+                                                            isDebugging = false,
+                                                            radius = rd
                                                         )
                                                     )
                                                 }
-                                                
+                                                addnote = false;
+                                                isdibugging = false;
 
                                             }
                                         ) {
@@ -739,34 +766,34 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                 }
-                                Card (
-                                    modifier = Modifier
-                                        .padding(all = 20.dp)
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            run {
-                                                MapViewModel().activategeoalarm(false)
-//                                                debuggingCircle = "false"
-                                                showBottomSheet = false
-                                            }
-                                        }
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Image(
-                                            modifier = Modifier
-                                                .size(80.dp)
-                                                .padding(all = 10.dp),
-                                            contentDescription = "Polygon",
-                                            painter = painterResource(R.drawable.polygon)
-                                        )
-                                        Text(
-                                            text = "Add a iregular Geofence"
-                                        )
-
-                                    }
-                                }
+//                                Card (
+//                                    modifier = Modifier
+//                                        .padding(all = 20.dp)
+//                                        .fillMaxWidth()
+//                                        .clickable {
+//                                            run {
+//                                                MapViewModel().activategeoalarm(false)
+////                                                debuggingCircle = "false"
+//                                                showBottomSheet = false
+//                                            }
+//                                        }
+//                                ) {
+//                                    Row(
+//                                        verticalAlignment = Alignment.CenterVertically
+//                                    ) {
+//                                        Image(
+//                                            modifier = Modifier
+//                                                .size(80.dp)
+//                                                .padding(all = 10.dp),
+//                                            contentDescription = "Polygon",
+//                                            painter = painterResource(R.drawable.polygon)
+//                                        )
+//                                        Text(
+//                                            text = "Add a iregular Geofence"
+//                                        )
+//
+//                                    }
+//                                }
                             }
                         }
                     }
@@ -792,9 +819,12 @@ fun GreetingPreview() {
     }
 }
 suspend fun getAlarms(application: Application): List<GeoAlarm> {
-    return withContext(Dispatchers.IO) {
-        backEndStuff(application).getStuff()
+    var data = listOf<GeoAlarm>()
+     withContext(Dispatchers.IO) {
+       data = backEndStuff(application).getStuff()
     }
+    println("..................${data}")
+    return data
 }
 
 @Composable
@@ -802,7 +832,9 @@ fun getCurrentLoc(
     boolean: Boolean,application: Application
     ,snackbarHostState: SnackbarHostState,
     coroutineScope: CoroutineScope,
-    circleR: Float
+    circleR: Float,
+    createdAlarm: List<GeoAlarm>,
+    innerPaddingValues: PaddingValues
 
 ){
     val context = LocalContext.current
@@ -817,7 +849,17 @@ fun getCurrentLoc(
     }
 //    println("WTFFFFFFFFFFFFFFFFFFFFFFFF")
     location?.let { loc ->
-        MapDraw(initialLat = loc.latitude, initialLng = loc.longitude, boolean = boolean, application = application, snackbarHostState = snackbarHostState, coroutineScope = coroutineScope, circleR = circleR)
+        MapDraw(
+            initialLat = loc.latitude,
+            initialLng = loc.longitude,
+            boolean = boolean,
+            application = application,
+            snackbarHostState = snackbarHostState,
+            coroutineScope = coroutineScope,
+            circleR = circleR,
+            createdAlarm = createdAlarm,
+            innerPaddingValues = innerPaddingValues
+            )
     } ?: run {
         Text("Waiting for location...")
     }
@@ -833,7 +875,8 @@ fun MapDraw(modifier: Modifier = Modifier,
             snackbarHostState: SnackbarHostState,
             coroutineScope: CoroutineScope,
             circleR:Float,
-
+            createdAlarm: List<GeoAlarm>,
+            innerPaddingValues: PaddingValues
 ){
 
     val home = LatLng(initialLat, initialLng)
@@ -842,12 +885,11 @@ fun MapDraw(modifier: Modifier = Modifier,
         position = CameraPosition.fromLatLngZoom(home, 15f)
     }
 
-    var createdgeoalarms = listOf<GeoAlarm>()
-    LaunchedEffect("nice") {
-        createdgeoalarms = getAlarms(application = application)
-    }
-    var createdCircles = createdgeoalarms.filter { it.iscircle }
-    var createdPoly = createdgeoalarms.filter { !it.iscircle }
+
+
+    Log.e("data","$createdAlarm")
+    var createdCircles = createdAlarm.filter { it.iscircle }
+    var createdPoly = createdAlarm.filter { !it.iscircle }
     val circles = viewModel.circles
     val polygons = viewModel.polygons
     println("mapppppppppppppppppppppppppppppp")
@@ -879,7 +921,7 @@ fun MapDraw(modifier: Modifier = Modifier,
         },
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = 50.dp),
+            .padding(innerPaddingValues),
         cameraPositionState = cameraPositionState,
 
     )
@@ -992,7 +1034,9 @@ fun  GetPermissions(
     application: Application,
     snackbarHostState: SnackbarHostState,
     coroutineScope: CoroutineScope,
-    circleR: Float
+    circleR: Float,
+    createdAlarm: List<GeoAlarm>,
+    innerPaddingValues: PaddingValues
 
 ){
     val requiredPermissions = rememberMultiplePermissionsState(
@@ -1059,7 +1103,15 @@ fun  GetPermissions(
         }
 
     }else
-         getCurrentLoc(boolean = true,application, coroutineScope = coroutineScope, snackbarHostState = snackbarHostState, circleR = circleR)
+         getCurrentLoc(
+             boolean = true,
+             application,
+             coroutineScope = coroutineScope,
+             snackbarHostState = snackbarHostState,
+             circleR = circleR,
+             createdAlarm = createdAlarm,
+             innerPaddingValues = innerPaddingValues
+             )
 }
 
 suspend fun getCurrentLocationSuspend(context: Context): Location? =
