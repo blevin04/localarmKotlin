@@ -627,7 +627,7 @@ class MainActivity : ComponentActivity() {
                                     fontWeight = FontWeight.Bold,
                                     fontStyle = FontStyle.Italic,
                                     fontSize = TextUnit.Unspecified,
-                                    text = "Localarm")
+                                    text = "GoZone")
                             }
 
                         )

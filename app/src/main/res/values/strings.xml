@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">geoMap0</string>
+    <string name="app_name">GoZone</string>
     <string name="CHANNEL_ID">geotestId00byKaranja.Dev</string>
     <string name="CHANNEL_NAME">geoAlarmNotificationChannel0</string>
     <string name="CHANNEL_DESC">Notification Channel for geoalarm</string>
